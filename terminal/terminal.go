@@ -6,8 +6,8 @@ import (
 	"reflect"
 
 	"github.com/fatih/color"
-	"github.com/kr-jaydeepp/ripple/data"
-	"github.com/kr-jaydeepp/ripple/websockets"
+	"github.com/kr-jaydeepp/ripple-test/data"
+	"github.com/kr-jaydeepp/ripple-test/websockets"
 )
 
 type Flag uint32

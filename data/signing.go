@@ -1,6 +1,6 @@
 package data
 
-import "github.com/kr-jaydeepp/ripple/crypto"
+import "github.com/kr-jaydeepp/ripple-test/crypto"
 
 func Sign(s Signer, key crypto.Key, sequence *uint32) error {
 	s.InitialiseForSigning()

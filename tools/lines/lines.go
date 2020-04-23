@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kr-jaydeepp/ripple/data"
-	"github.com/kr-jaydeepp/ripple/terminal"
-	"github.com/kr-jaydeepp/ripple/websockets"
+	"github.com/kr-jaydeepp/ripple-test/data"
+	"github.com/kr-jaydeepp/ripple-test/terminal"
+	"github.com/kr-jaydeepp/ripple-test/websockets"
 )
 
 const usage = `Usage: lines [ripple address] [options]

@@ -3,7 +3,7 @@ package data
 import (
 	"encoding/json"
 
-	internal "github.com/kr-jaydeepp/ripple/testing"
+	internal "github.com/kr-jaydeepp/ripple-test/testing"
 	. "gopkg.in/check.v1"
 )
 
