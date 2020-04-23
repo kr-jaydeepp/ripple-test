@@ -512,8 +512,6 @@ func (r *Remote) Fee() (*FeeResult, error) {
 // readPump reads from the websocket and sends to inbound channel.
 // Expects to receive PONGs at specified interval, or logs an error and returns.
 func (r *Remote) readPump(inbound chan<- []byte) {
-	r.ws.SetReadDeadline(time.Now().Add(pongWait))
-	r.ws.SetPongHandler(func(string) error { r.ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
 		_, message, err := r.ws.ReadMessage()
 		if err != nil {
@@ -521,7 +519,6 @@ func (r *Remote) readPump(inbound chan<- []byte) {
 			return
 		}
 		glog.V(2).Infoln(dump(message))
-		r.ws.SetReadDeadline(time.Now().Add(pongWait))
 		inbound <- message
 	}
 }
