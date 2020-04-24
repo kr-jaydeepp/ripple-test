@@ -59,12 +59,11 @@ func NewRemote(endpoint string, enableReconnection bool) (*Remote, error) {
 		return nil, err
 	}
 	r := &Remote{
-		Incoming:    make(chan interface{}, 1000),
-		outgoing:    make(chan Syncer, 10),
-		ws:          ws,
-		url:         u,
-		IsConnected: true,
-		ReConn:      enableReconnection,
+		Incoming: make(chan interface{}, 1000),
+		outgoing: make(chan Syncer, 10),
+		ws:       ws,
+		url:      u,
+		ReConn:   enableReconnection,
 	}
 
 	go r.run()
@@ -73,27 +72,41 @@ func NewRemote(endpoint string, enableReconnection bool) (*Remote, error) {
 
 // ReConnect try to reconnect to server in case connection gets disconnected
 func (r *Remote) ReConnect() {
-	r.Close()
+	//	r.Close()
+
+	ticker := time.NewTicker(connReconnectInterval)
+	defer ticker.Stop()
 
 	for {
-		time.Sleep(connReconnectInterval)
-		glog.Info("ReConnect: started")
+		select {
+		case command, ok := <-r.outgoing:
+			if !ok {
+				glog.Errorln("outgoing channel closed")
+				return
+			}
+			glog.Info("ReConnect: Sending connection failed")
+			command.Fail("Connection Closed")
 
-		c, err := net.DialTimeout("tcp", r.url.Host, dialTimeout)
-		if err != nil {
-			glog.Error("ReConnect: DailTimeout Error: ", err)
-			continue
+		// Time to reconnect
+		case <-ticker.C:
+			glog.Info("ReConnect: Trying to reconnect")
+
+			c, err := net.DialTimeout("tcp", r.url.Host, dialTimeout)
+			if err != nil {
+				glog.Error("ReConnect: DailTimeout Error: ", err)
+				continue
+			}
+			ws, _, err := websocket.NewClient(c, r.url, nil, 1024, 1024)
+			if err != nil {
+				glog.Error("ReConnect: NewClient Error: ", err)
+				continue
+			}
+			r.ws = ws
+			go r.run()
+			glog.Info("ReConnect: successfull")
+			break
 		}
-		ws, _, err := websocket.NewClient(c, r.url, nil, 1024, 1024)
-		if err != nil {
-			glog.Error("ReConnect: NewClient Error: ", err)
-			continue
-		}
-		r.ws = ws
-		go r.run()
-		break
 	}
-	glog.Info("ReConnect: successfull")
 }
 
 // Close shuts down the Remote session and blocks until all internal
@@ -127,6 +140,7 @@ func (r *Remote) run() {
 		// indicating that the readPump has returned.
 		for _ = range inbound {
 		}
+		go r.ReConnect()
 	}()
 
 	// Spawn read/write goroutines
@@ -546,18 +560,33 @@ func (r *Remote) Fee() (*FeeResult, error) {
 // readPump reads from the websocket and sends to inbound channel.
 // Expects to receive PONGs at specified interval, or logs an error and returns.
 func (r *Remote) readPump(inbound chan<- []byte) {
+	/*
+		for {
+			_, message, err := r.ws.ReadMessage()
+			if err != nil {
+				glog.Errorln(err)
+
+					if websocket.IsCloseError(err, 1006, 1000, 1013) && r.ReConn {
+						r.ReConnect()
+					} else {
+						return
+					}
+
+			}
+			glog.V(2).Infoln(dump(message))
+			inbound <- message
+		}
+	*/
+	r.ws.SetReadDeadline(time.Now().Add(pongWait))
+	r.ws.SetPongHandler(func(string) error { r.ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
 		_, message, err := r.ws.ReadMessage()
 		if err != nil {
 			glog.Errorln(err)
-			// if err == type(x, y, z)
-			if websocket.IsCloseError(err, 1006, 1000, 1013) && r.ReConn {
-				r.ReConnect()
-			} else {
-				return
-			}
+			return
 		}
 		glog.V(2).Infoln(dump(message))
+		r.ws.SetReadDeadline(time.Now().Add(pongWait))
 		inbound <- message
 	}
 }
