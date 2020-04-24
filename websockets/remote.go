@@ -28,17 +28,23 @@ const (
 
 	// Time allowed to connect to server.
 	dialTimeout = 5 * time.Second
+
+	// time gap between reconnection
+	connReconnectInterval = 5 * time.Second
 )
 
 type Remote struct {
-	Incoming chan interface{}
-	outgoing chan Syncer
-	ws       *websocket.Conn
+	Incoming    chan interface{}
+	outgoing    chan Syncer
+	ws          *websocket.Conn
+	url         *url.URL
+	IsConnected bool
+	ReConn      bool
 }
 
 // NewRemote returns a new remote session connected to the specified
 // server endpoint URI. To close the connection, use Close().
-func NewRemote(endpoint string) (*Remote, error) {
+func NewRemote(endpoint string, enableReconnection bool) (*Remote, error) {
 	glog.Infoln(endpoint)
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -53,13 +59,41 @@ func NewRemote(endpoint string) (*Remote, error) {
 		return nil, err
 	}
 	r := &Remote{
-		Incoming: make(chan interface{}, 1000),
-		outgoing: make(chan Syncer, 10),
-		ws:       ws,
+		Incoming:    make(chan interface{}, 1000),
+		outgoing:    make(chan Syncer, 10),
+		ws:          ws,
+		url:         u,
+		IsConnected: true,
+		ReConn:      enableReconnection,
 	}
 
 	go r.run()
 	return r, nil
+}
+
+// ReConnect try to reconnect to server in case connection gets disconnected
+func (r *Remote) ReConnect() {
+	r.Close()
+
+	for {
+		time.Sleep(connReconnectInterval)
+		glog.Info("ReConnect: started")
+
+		c, err := net.DialTimeout("tcp", r.url.Host, dialTimeout)
+		if err != nil {
+			glog.Error("ReConnect: DailTimeout Error: ", err)
+			continue
+		}
+		ws, _, err := websocket.NewClient(c, r.url, nil, 1024, 1024)
+		if err != nil {
+			glog.Error("ReConnect: NewClient Error: ", err)
+			continue
+		}
+		r.ws = ws
+		go r.run()
+		break
+	}
+	glog.Info("ReConnect: successfull")
 }
 
 // Close shuts down the Remote session and blocks until all internal
@@ -516,7 +550,12 @@ func (r *Remote) readPump(inbound chan<- []byte) {
 		_, message, err := r.ws.ReadMessage()
 		if err != nil {
 			glog.Errorln(err)
-			return
+			// if err == type(x, y, z)
+			if websocket.IsCloseError(err, 1006, 1000, 1013) && r.ReConn {
+				r.ReConnect()
+			} else {
+				return
+			}
 		}
 		glog.V(2).Infoln(dump(message))
 		inbound <- message
